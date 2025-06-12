@@ -39,9 +39,13 @@ def calcular_aproveitamento_e_retalhos(largura_corte, comprimento_corte):
     else:
         return qtd_caixas_orientacao_2, retalho_1_orientacao_2, retalho_2_orientacao_2
 
+# --- FORA DA FUNÇÃO MAIN(), BEM NO INÍCIO DO SCRIPT ---
+# Configure a página do Streamlit. Isso deve ser a primeira coisa a ser chamada.
+st.set_page_config(layout="wide", page_title="GBS - Planejamento de Produção")
+
+
 # --- Função principal do Streamlit ---
 def main():
-    st.set_page_config(layout="wide", page_title="GBS - Planejamento de Produção")
     st.title("📦 GBS - Planejamento e Controle de Produção")
 
     # --- Inicialização dos DataFrames na memória (st.session_state) ---
@@ -70,7 +74,6 @@ def main():
         uploaded_file = st.file_uploader("Carregar arquivo de Estoque CSV (.csv)", type=["csv"], key="estoque_uploader")
         if uploaded_file is not None:
             try:
-                # O arquivo é lido como bytes e passado para pandas
                 st.session_state.df_estoque = pd.read_csv(uploaded_file, sep=';') # Considera ; como separador
                 st.success("Estoque carregado com sucesso! Lembre-se que este estoque é válido apenas para esta sessão.")
             except Exception as e:
@@ -310,5 +313,3 @@ if __name__ == "__main__":
           
 
 
-if __name__ == "__main__":
-    main()
