@@ -195,7 +195,7 @@ def main():
         else:
             st.info("Nenhum item no estoque na memória. Adicione acima ou carregue um arquivo CSV.")
 
-    with tab_pedido: 
+    with tab_pedido: # O conteúdo desta aba está agora devidamente encapsulado
         # --- Formulário de Lançamento de Pedido (agora em 2 etapas) ---
         with st.form("form_pedido_calculo"):
             st.header("📝 Lançar Pedido e Processar")
@@ -401,28 +401,25 @@ def main():
             total_valor_estoque_rs = st.session_state.df_estoque['Valor_Total_R$'].sum()
 
             # Criar cópia para exibição na tela e adicionar linha de totais
-            df_estoque_download = st.session_state.df_estoque.copy()
-            
-            # Adicionar linha de totais para o download
-            df_estoque_download.loc['Total Geral'] = {
+            df_estoque_display = st.session_state.df_estoque.copy()
+            df_estoque_display.loc[''] = '' # Linha em branco para separar
+            df_estoque_display.loc['Total Geral'] = {
                 'Modelo_Chapa': 'TOTAL GERAL',
-                'Largura_m': f"{total_area_m2_estoque:.2f}", # Formata para string no CSV
-                'Comprimento_m': f'{total_area_m2_estoque:.2f} m² (Área Total)', # Usar a mesma string do display para consistência no CSV
+                'Largura_m': f"{total_area_m2_estoque:.2f}", # Formata para string na exibição
+                'Comprimento_m': 'm² (Área Total)', 
                 'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
                 'Peso_Total_kg': total_peso_estoque_kg,
                 'Valor_Total_R$': total_valor_estoque_rs
             }
-
-            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
-            csv_estoque = df_estoque_download.to_csv(index=False, sep=';', decimal=',').encode('utf-8') 
-            st.download_button(
-                label="Baixar Estoque Atualizado (CSV)",
-                data=csv_estoque,
-                file_name="estoque_gbs_atualizado.csv",
-                mime="text/csv",
-            )
+            
+            st.dataframe(df_estoque_display, use_container_width=True, 
+                         column_config={
+                             "Preco_Kg": st.column_config.NumberColumn(format="%.2f"),
+                             "Peso_Total_kg": st.column_config.NumberColumn(format="%.2f"),
+                             "Valor_Total_R$": st.column_config.NumberColumn(format="%.2f")
+                         })
         else:
-            st.info("Estoque vazio para download.")
+            st.info("Nenhum item no estoque na memória. Adicione acima ou carregue um arquivo CSV.")
 
         st.subheader("Histórico de Pedidos Processados NESTA Sessão:")
         if not st.session_state.df_pedidos.empty:
