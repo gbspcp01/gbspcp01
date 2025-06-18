@@ -33,7 +33,7 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
     # Retalho do COMPRIMENTO (Vertical): O grande retalho gerado na ponta do comprimento da chapa
     sobra_C = C_base - (pecas_ao_longo_comprimento * C_corte)
     if sobra_C > 0:
-        retalho_C_dim = f"{L_base:.0f}x{sobra_C:.0f}" # Largura total da chapa base x sobra de comprimento
+        retalho_C_dim = f"{sobra_C:.0f}x{L_base:.0f}" # Largura total da chapa base x sobra de comprimento
         retalhos_gerados_map[retalho_C_dim] = retalhos_gerados_map.get(retalho_C_dim, 0) + 1 # Apenas 1 grande retalho por chapa base
 
     # Retalhos da LARGURA (Horizontais): Múltiplos retalhos gerados na lateral da chapa
@@ -43,20 +43,6 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
         retalho_L_dim = f"{sobra_L:.0f}x{C_corte:.0f}"
         # A quantidade é igual ao número de peças que couberam no COMPRIMENTO
         retalhos_gerados_map[retalho_L_dim] = retalhos_gerados_map.get(retalho_L_dim, 0) + pecas_ao_longo_comprimento
-
-    # --- Opcional: Considerar rotação para otimização do aproveitamento (se a outra orientação gerar mais caixas) ---
-    # Aqui, a lógica se torna mais complexa pois os retalhos também mudam.
-    # Por enquanto, mantivemos a simulação da sequência de corte principal.
-    # Se a chapa de corte puder ser rotacionada para mais aproveitamento,
-    # a lógica de retalhos_gerados_map precisaria ser reavaliada para a orientação de maior QTD.
-    # Para o seu exemplo 501x950 na 1680x2400:
-    # L_corte=501, C_corte=950. L_base=1680, C_base=2400
-    # Peças ao longo do comprimento (2400 / 950) = 2
-    # Peças ao longo da largura (1680 / 501) = 3
-    # Total caixas = 2 * 3 = 6
-    # Retalho C: 2400 - (2*950) = 500 => 1680x500 (1 unidade)
-    # Retalho L: 1680 - (3*501) = 1680 - 1503 = 177 => 177x950 (2 unidades, pois couberam 2 peças no comprimento)
-    # A função irá retornar a QTD de caixas e o mapa de retalhos calculados.
 
     return qtd_caixas_produzidas_por_chapa, retalhos_gerados_map
 
