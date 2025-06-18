@@ -14,7 +14,7 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
     L_corte = largura_corte_mm
     C_corte = comprimento_corte_mm
 
-    retalhos_gerados_map = {} # Dicionário para armazenar dimensões e quantidades de retalhos
+    retalhos_gerados_map = {} # Dicionário para armazenar dimensões e quantidades de retalhos POR CHAPA BASE
 
     # --- SIMULAÇÃO DA SEQUÊNCIA DE CORTE REAL (Prioriza corte no COMPRIMENTO da chapa base) ---
 
@@ -33,14 +33,16 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
     if sobra_C > 0.1: # Considera sobra se for maior que 0.1mm (para evitar retalhos muito pequenos por erro de float)
         # Formato LARGURA x COMPRIMENTO
         retalho_C_dim = f"{L_base:.0f}x{sobra_C:.0f}" # Largura total da chapa base x sobra de comprimento
-        retalhos_gerados_map[retalho_C_dim] = retalhos_gerados_map.get(retalho_C_dim, 0) + 1 # Apenas 1 grande retalho por chapa base
+        # A quantidade é 1 POR CHAPA BASE.
+        retalhos_gerados_map[retalho_C_dim] = retalhos_gerados_map.get(retalho_C_dim, 0) + 1 
 
     # Retalhos da LARGURA (Horizontais): Múltiplos retalhos gerados na lateral da chapa
     sobra_L = L_base - (pecas_ao_longo_largura * L_corte)
     if sobra_L > 0.1: # Considera sobra se for maior que 0.1mm
         # Formato LARGURA x COMPRIMENTO
-        retalho_L_dim = f"{sobra_L:.0f}x{C_corte:.0f}"
-        # A quantidade é igual ao número de peças que couberam no COMPRIMENTO
+        # O comprimento deste retalho é o comprimento da peça de corte, não da chapa base
+        retalho_L_dim = f"{sobra_L:.0f}x{C_base:.0f}" # Sobra de largura x Comprimento TOTAL da chapa base
+        # A quantidade é igual ao número de peças que couberam no COMPRIMENTO (pecas_ao_longo_comprimento)
         retalhos_gerados_map[retalho_L_dim] = retalhos_gerados_map.get(retalho_L_dim, 0) + pecas_ao_longo_comprimento
 
     return qtd_caixas_produzidas_por_chapa, retalhos_gerados_map
@@ -247,7 +249,7 @@ def main():
                         dim_largura_corte_mm = dim_largura_corte_m * 1000
                         dim_comprimento_corte_mm = dim_comprimento_corte_m * 1000
 
-                        qtd_caixas_por_chapa_base, retalhos_gerados_map = \
+                        qtd_caixas_por_chapa_base, retalhos_gerados_map_por_chapa = \
                             calcular_aproveitamento_e_retalhos_novo(dim_largura_corte_mm, dim_comprimento_corte_mm, 
                                                                  largura_chapa_estoque_mm, comprimento_chapa_estoque_mm)
 
@@ -260,7 +262,15 @@ def main():
                             area_chapa_corte_por_caixa_m2 = dim_largura_corte_m * dim_comprimento_corte_m
                             peso_total_pedido_kg = area_chapa_corte_por_caixa_m2 * (gramatura_pedido / 1000) * qtd_caixas
 
-                            retalhos_gerados_dims_string = [f"{qty}x {dim}" for dim, qty in retalhos_gerados_map.items()]
+                            # AQUI ESTÁ O AJUSTE PRINCIPAL: Multiplicar a quantidade de retalhos pela quantidade de chapas consumidas.
+                            retalhos_gerados_dims_string_list = []
+                            retalhos_gerados_map_final = {} # Para armazenar qty_total_retalho para cada dim
+                            for dim, qty_por_chapa in retalhos_gerados_map_por_chapa.items():
+                                total_qty_retalho_dim = qty_por_chapa * num_folhas_consumidas
+                                if total_qty_retalho_dim > 0:
+                                    retalhos_gerados_dims_string_list.append(f"{total_qty_retalho_dim}x {dim}")
+                                    retalhos_gerados_map_final[dim] = total_qty_retalho_dim
+
 
                             # Armazenar resultados temporariamente no session_state
                             st.session_state.calculo_pedido_temp = {
@@ -273,10 +283,10 @@ def main():
                                 'comprimento_chapa_estoque_m': comprimento_chapa_estoque_m,
                                 'preco_kg_chapa_estoque': preco_kg_chapa_estoque,
                                 'qtd_caixas_por_chapa_base': qtd_caixas_por_chapa_base,
-                                'retalhos_gerados_map': retalhos_gerados_map,
+                                'retalhos_gerados_map_final': retalhos_gerados_map_final, # Passa o map com qtys totais
                                 'num_folhas_consumidas': num_folhas_consumidas,
                                 'peso_total_pedido_kg': peso_total_pedido_kg,
-                                'retalhos_gerados_dims_string': retalhos_gerados_dims_string
+                                'retalhos_gerados_dims_string_list': retalhos_gerados_dims_string_list # Passa a lista de strings formatadas
                             }
                             st.rerun() # Dispara rerun para mostrar resultados e botão de confirmação
 
@@ -289,7 +299,7 @@ def main():
             st.info(f"**Chapa do Estoque (Largura x Comprimento):** {temp_data['largura_chapa_estoque_m']}x{temp_data['comprimento_chapa_estoque_m']}m ({temp_data['modelo_chapa_pedido']})")
             st.info(f"**Chapa de Corte (Largura x Comprimento):** {temp_data['dim_largura_corte_m']}x{temp_data['dim_comprimento_corte_m']}m")
             st.info(f"**Caixas/Folha:** {temp_data['qtd_caixas_por_chapa_base']} | **Folhas Consumidas:** {temp_data['num_folhas_consumidas']}")
-            st.info(f"**Peso Total Pedido (Caixas):** {temp_data['peso_total_pedido_kg']:.2f} kg | **Retalhos Gerados:** {', '.join(temp_data['retalhos_gerados_dims_string'])}")
+            st.info(f"**Peso Total Pedido (Caixas):** {temp_data['peso_total_pedido_kg']:.2f} kg | **Retalhos Gerados:** {', '.join(temp_data['retalhos_gerados_dims_string_list'])}")
 
             if st.button("Confirmar e Lançar Pedido"):
                 # --- Executar Lógica de Abatimento e Adição de Retalhos ---
@@ -306,46 +316,51 @@ def main():
                 st.session_state.df_estoque.loc[chapa_estoque_idx, 'Valor_Total_R$'] = st.session_state.df_estoque.loc[chapa_estoque_idx, 'Peso_Total_kg'] * temp_data['preco_kg_chapa_estoque']
 
                 # Adicionar Retalhos Gerados ao Estoque
-                for dim_retalho_mm_str, qty_retalho_per_chapa in temp_data['retalhos_gerados_map'].items():
-                    qty_total_retalho = qty_retalho_per_chapa * temp_data['num_folhas_consumidas'] 
+                # Inicializa a lista para o log do pedido antes do loop
+                retalhos_para_log = [] 
+                for dim_retalho_mm_str, qty_total_retalho in temp_data['retalhos_gerados_map_final'].items(): # Usa o map com qtys totais
                     if qty_total_retalho == 0:
                         continue
                     
                     retalho_largura_m, retalho_comprimento_m = [float(x)/1000 for x in dim_retalho_mm_str.split('x')]
                     
                     # Procura por retalhos existentes no estoque pelo TIPO, GRAMATURA e DIMENSÃO
+                    # Adicione o Modelo_Chapa na busca para evitar misturar retalhos de modelos diferentes se o Modelo_Chapa for "RETALHO-..."
                     item_retalho_idx = st.session_state.df_estoque[
-                        (st.session_state.df_estoque['Tipo_Papel'] == temp_data['tipo_papel_pedido']) &
-                        (st.session_state.df_estoque['Gramatura'] == temp_data['gramatura_pedido']) &
-                        (st.session_state.df_estoque['Largura_m'] == retalho_largura_m) &
-                        (st.session_state.df_estoque['Comprimento_m'] == retalho_comprimento_m)
+                        (st.session_state.df_estoque['Modelo_Chapa'] == f"RETALHO-{dim_retalho_mm_str}") |
+                        ((st.session_state.df_estoque['Largura_m'] == retalho_largura_m) &
+                         (st.session_state.df_estoque['Comprimento_m'] == retalho_comprimento_m) &
+                         (st.session_state.df_estoque['Tipo_Papel'] == temp_data['tipo_papel_pedido']) &
+                         (st.session_state.df_estoque['Gramatura'] == temp_data['gramatura_pedido']))
                     ].index
                     
                     if not item_retalho_idx.empty:
                         st.session_state.df_estoque.loc[item_retalho_idx, 'Quantidade_Folhas'] += qty_total_retalho
                         existing_qty_retalho = st.session_state.df_estoque.loc[item_retalho_idx, 'Quantidade_Folhas'].iloc[0]
                         area_retalho_m2_recalc = retalho_largura_m * retalho_comprimento_m
+                        # Usa o preço kg do retalho existente, se houver, ou 0.01 se for um novo "RETALHO-..."
                         preco_kg_retalho = st.session_state.df_estoque.loc[item_retalho_idx, 'Preco_Kg'].iloc[0] 
                         st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] = area_retalho_m2_recalc * (temp_data['gramatura_pedido']/1000) * existing_qty_retalho
                         st.session_state.df_estoque.loc[item_retalho_idx, 'Valor_Total_R$'] = st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] * preco_kg_retalho
                     else:
                         # Se o retalho não existe no estoque com essas características, adiciona como novo item
-                        st.warning(f"Retalho {dim_retalho_mm_str} ({temp_data['tipo_papel_pedido']}, {temp_data['gramatura_pedido']}g/m²) gerado e adicionado como novo item de estoque com modelo 'RETALHO-{dim_retalho_mm_str}' e Preço/Kg de 0.01. Considere adicioná-lo ou atualizar seu preço na aba 'Lançar Estoque'.")
+                        st.warning(f"Retalho {dim_retalho_mm_str} ({temp_data['tipo_papel_pedido']}, {temp_data['gramatura_pedido']}g/m²) gerado e adicionado como novo item de estoque com modelo 'RETALHO-{dim_retalho_mm_str}'. Considere atualizar seu preço na aba 'Lançar Estoque'.")
                         novo_retalho = pd.DataFrame([{
-                            'Modelo_Chapa': f"RETALHO-{dim_retalho_mm_str}", 
+                            'Modelo_Chapa': f"RETALHO-{dim_retalho_mm_str}", # Identificador claro para retalhos
                             'Largura_m': retalho_largura_m,
                             'Comprimento_m': retalho_comprimento_m,
                             'Tipo_Papel': temp_data['tipo_papel_pedido'],
                             'Gramatura': temp_data['gramatura_pedido'],
                             'Quantidade_Folhas': qty_total_retalho,
-                            'Preco_Kg': 0.01, 
+                            'Preco_Kg': 0.01, # Preço padrão para novos retalhos, pode ser ajustado manualmente
                             'Peso_Total_kg': retalho_largura_m * retalho_comprimento_m * (temp_data['gramatura_pedido']/1000) * qty_total_retalho,
                             'Valor_Total_R$': retalho_largura_m * retalho_comprimento_m * (temp_data['gramatura_pedido']/1000) * qty_total_retalho * 0.01
                         }])
                         st.session_state.df_estoque = pd.concat([st.session_state.df_estoque, novo_retalho], ignore_index=True)
-                        
-                    retalhos_gerados_dims_string.append(f"{qty_total_retalho}x {dim_retalho_mm_str}") 
-                
+                    
+                    # Adiciona ao log de retalhos para o pedido
+                    retalhos_para_log.append(f"{qty_total_retalho}x {dim_retalho_mm_str}") 
+
                 st.session_state.df_estoque = st.session_state.df_estoque.sort_values(by=['Modelo_Chapa', 'Tipo_Papel', 'Gramatura']).reset_index(drop=True)
 
                 # --- Registrar Pedido no Log da Sessão (st.session_state.df_pedidos) ---
@@ -356,7 +371,7 @@ def main():
                     'Quantidade_Caixas': temp_data['qtd_caixas'], 'Modelo_Chapa_Pedido': temp_data['modelo_chapa_pedido'],
                     'Tipo_Papel_Pedido': temp_data['tipo_papel_pedido'], 'Gramatura_Pedido': temp_data['gramatura_pedido'], 
                     'Chapas_Consumidas': temp_data['num_folhas_consumidas'], 
-                    'Retalhos_Gerados_Dimensoes': ", ".join(temp_data['retalhos_gerados_dims_string']),
+                    'Retalhos_Gerados_Dimensoes': ", ".join(retalhos_para_log), # Usa a lista populada no loop
                     'Peso_Total_Pedido_kg': temp_data['peso_total_pedido_kg'],
                     'Data_Processamento': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }])
@@ -384,7 +399,7 @@ def main():
             st.dataframe(st.session_state.df_pedidos[colunas_pedidos_display].tail(5), use_container_width=True,
                           column_config={
                               "Valor_Pedido_Total_R$": st.column_config.NumberColumn(format="%.2f"),
-                              "Peso_Total_Pedido_kg": st.column_config.NumberColumn(format="%.2f")
+                              "Peso_Total_kg": st.column_config.NumberColumn(format="%.2f")
                           })
         else:
             st.info("Nenhum pedido processado nesta sessão ainda.")
