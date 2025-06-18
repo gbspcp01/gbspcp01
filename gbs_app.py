@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import math
-import io
+import io 
 from datetime import datetime
 
 # --- Lógica de Cálculo de Aproveitamento e Retalhos com Sequência de Corte Real ---
@@ -32,13 +32,13 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
 
     # Retalho do COMPRIMENTO (Vertical): O grande retalho gerado na ponta do comprimento da chapa
     sobra_C = C_base - (pecas_ao_longo_comprimento * C_corte)
-    if sobra_C > 0:
+    if sobra_C > 0.1: # Considera sobra se for maior que 0.1mm (para evitar retalhos muito pequenos por erro de float)
         retalho_C_dim = f"{sobra_C:.0f}x{L_base:.0f}" # Largura total da chapa base x sobra de comprimento
         retalhos_gerados_map[retalho_C_dim] = retalhos_gerados_map.get(retalho_C_dim, 0) + 1 # Apenas 1 grande retalho por chapa base
 
     # Retalhos da LARGURA (Horizontais): Múltiplos retalhos gerados na lateral da chapa
     sobra_L = L_base - (pecas_ao_longo_largura * L_corte)
-    if sobra_L > 0:
+    if sobra_L > 0.1: # Considera sobra se for maior que 0.1mm
         # A dimensão desses retalhos é a sobra da largura x o comprimento da peça cortada
         retalho_L_dim = f"{sobra_L:.0f}x{C_corte:.0f}"
         # A quantidade é igual ao número de peças que couberam no COMPRIMENTO
@@ -153,7 +153,7 @@ def main():
                             'Comprimento_m': comprimento_m,
                             'Tipo_Papel': tipo_papel,
                             'Gramatura': gramatura,
-                            'Quantidade_Folhas': quantidade,
+                            'Quantidade_Folhas': quantity,
                             'Preco_Kg': preco_kg,
                             'Peso_Total_kg': peso_total_item_kg,
                             'Valor_Total_R$': valor_total_item_rs
@@ -332,7 +332,17 @@ def main():
 
     st.subheader("Últimos Pedidos Processados NESTA Sessão:")
     if not st.session_state.df_pedidos.empty:
-        st.dataframe(st.session_state.df_pedidos.tail(5), use_container_width=True,
+        # Reordenar colunas para exibição na tela
+        colunas_pedidos_display = [
+            'OS', 'Cliente', 'Descricao_Pedido', 'Valor_Pedido_Total_R$', 
+            'Peso_Total_Pedido_kg', 'Quantidade_Caixas'
+        ]
+        # Adicionar as outras colunas que não estão na lista acima
+        for col in st.session_state.df_pedidos.columns:
+            if col not in colunas_pedidos_display:
+                colunas_pedidos_display.append(col)
+
+        st.dataframe(st.session_state.df_pedidos[colunas_pedidos_display].tail(5), use_container_width=True,
                      column_config={
                          "Valor_Pedido_Total_R$": st.column_config.NumberColumn(format="%.2f"),
                          "Peso_Total_Pedido_kg": st.column_config.NumberColumn(format="%.2f")
@@ -361,8 +371,20 @@ def main():
                          })
             
             # --- Botão de Download do Estoque em CSV ---
+            # Para o CSV de download, garantir que todas as colunas estejam visíveis e os totais no final
+            df_estoque_download = st.session_state.df_estoque.copy()
+            
+            # Adicionar linhas de totais
+            df_estoque_download.loc[''] = '' # Linha em branco para separar
+            df_estoque_download.loc['Total Geral'] = {
+                'Modelo_Chapa': 'TOTAL GERAL',
+                'Largura_m': '', 'Comprimento_m': '', 'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
+                'Peso_Total_kg': total_peso_estoque_kg,
+                'Valor_Total_R$': total_valor_estoque_rs
+            }
+
             # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
-            csv_estoque = st.session_state.df_estoque.to_csv(index=False, sep=';', decimal=',').encode('utf-8') 
+            csv_estoque = df_estoque_download.to_csv(index=False, sep=';', decimal=',').encode('utf-8') 
             st.download_button(
                 label="Baixar Estoque Atualizado (CSV)",
                 data=csv_estoque,
@@ -374,15 +396,16 @@ def main():
 
         st.subheader("Histórico de Pedidos Processados NESTA Sessão:")
         if not st.session_state.df_pedidos.empty:
-            st.dataframe(st.session_state.df_pedidos, use_container_width=True,
-                         column_config={
-                             "Valor_Pedido_Total_R$": st.column_config.NumberColumn(format="%.2f"),
-                             "Peso_Total_Pedido_kg": st.column_config.NumberColumn(format="%.2f")
-                         })
+            # Reordenar colunas para o download
+            colunas_pedidos_download = [
+                'OS', 'Cliente', 'Descricao_Pedido', 'Valor_Pedido_Total_R$', 
+                'Peso_Total_Pedido_kg', 'Quantidade_Caixas',
+                'Dimensao_Corte_LxC_m', 'Modelo_Chapa_Pedido', 'Tipo_Papel_Pedido', 
+                'Gramatura_Pedido', 'Chapas_Consumidas', 'Retalhos_Gerados_Dimensoes', 
+                'Data_Processamento'
+            ]
             
-            # --- Botão de Download do Histórico de Pedidos em CSV ---
-            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
-            csv_pedidos = st.session_state.df_pedidos.to_csv(index=False, sep=';', decimal=',').encode('utf-8')
+            csv_pedidos = st.session_state.df_pedidos[colunas_pedidos_download].to_csv(index=False, sep=';', decimal=',').encode('utf-8')
             st.download_button(
                 label="Baixar Histórico de Pedidos (CSV)",
                 data=csv_pedidos,
