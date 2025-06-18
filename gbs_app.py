@@ -19,11 +19,9 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
     # --- SIMULAÇÃO DA SEQUÊNCIA DE CORTE REAL (Prioriza corte no COMPRIMENTO da chapa base) ---
 
     # 1. Quantidade de peças que cabem ao longo do COMPRIMENTO da chapa base (C_base)
-    # Isso define quantas "linhas" de peças cortadas teremos no sentido do comprimento
     pecas_ao_longo_comprimento = math.floor(C_base / C_corte)
     
     # 2. Quantidade de peças que cabem ao longo da LARGURA da chapa base (L_base)
-    # Isso define quantas "colunas" de peças teremos no sentido da largura
     pecas_ao_longo_largura = math.floor(L_base / L_corte)
 
     qtd_caixas_produzidas_por_chapa = pecas_ao_longo_comprimento * pecas_ao_longo_largura
@@ -33,15 +31,15 @@ def calcular_aproveitamento_e_retalhos_novo(largura_corte_mm, comprimento_corte_
     # Retalho do COMPRIMENTO (Vertical): O grande retalho gerado na ponta do comprimento da chapa
     sobra_C = C_base - (pecas_ao_longo_comprimento * C_corte)
     if sobra_C > 0.1: # Considera sobra se for maior que 0.1mm (para evitar retalhos muito pequenos por erro de float)
-        retalho_C_dim = f"{sobra_C:.0f}x{L_base:.0f}" # Largura total da chapa base x sobra de comprimento
+        # Formato LARGURA x COMPRIMENTO
+        retalho_C_dim = f"{L_base:.0f}x{sobra_C:.0f}" 
         retalhos_gerados_map[retalho_C_dim] = retalhos_gerados_map.get(retalho_C_dim, 0) + 1 # Apenas 1 grande retalho por chapa base
 
     # Retalhos da LARGURA (Horizontais): Múltiplos retalhos gerados na lateral da chapa
     sobra_L = L_base - (pecas_ao_longo_largura * L_corte)
     if sobra_L > 0.1: # Considera sobra se for maior que 0.1mm
-        # A dimensão desses retalhos é a sobra da largura x o comprimento da peça cortada
+        # Formato LARGURA x COMPRIMENTO
         retalho_L_dim = f"{sobra_L:.0f}x{C_corte:.0f}"
-        # A quantidade é igual ao número de peças que couberam no COMPRIMENTO
         retalhos_gerados_map[retalho_L_dim] = retalhos_gerados_map.get(retalho_L_dim, 0) + pecas_ao_longo_comprimento
 
     return qtd_caixas_produzidas_por_chapa, retalhos_gerados_map
@@ -153,7 +151,7 @@ def main():
                             'Comprimento_m': comprimento_m,
                             'Tipo_Papel': tipo_papel,
                             'Gramatura': gramatura,
-                            'Quantidade_Folhas': quantity,
+                            'Quantidade_Folhas': quantidade,
                             'Preco_Kg': preco_kg,
                             'Peso_Total_kg': peso_total_item_kg,
                             'Valor_Total_R$': valor_total_item_rs
@@ -166,7 +164,24 @@ def main():
 
         st.subheader("Estoque Atual na Memória:")
         if not st.session_state.df_estoque.empty:
-            st.dataframe(st.session_state.df_estoque, use_container_width=True, 
+            # Calcular totais para exibição na tabela
+            df_estoque_display = st.session_state.df_estoque.copy()
+            total_area_m2_estoque = (df_estoque_display['Largura_m'] * df_estoque_display['Comprimento_m'] * df_estoque_display['Quantidade_Folhas']).sum()
+            total_peso_estoque_kg = df_estoque_display['Peso_Total_kg'].sum()
+            total_valor_estoque_rs = df_estoque_display['Valor_Total_R$'].sum()
+
+            # Adicionar linha de totais na tabela para exibição na tela
+            df_estoque_display.loc[''] = '' # Linha em branco para separar
+            df_estoque_display.loc['Total Geral'] = {
+                'Modelo_Chapa': 'TOTAL GERAL',
+                'Largura_m': total_area_m2_estoque, 
+                'Comprimento_m': 'm² (Área Total)', 
+                'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
+                'Peso_Total_kg': total_peso_estoque_kg,
+                'Valor_Total_R$': total_valor_estoque_rs
+            }
+            
+            st.dataframe(df_estoque_display, use_container_width=True, 
                          column_config={
                              "Preco_Kg": st.column_config.NumberColumn(format="%.2f"),
                              "Peso_Total_kg": st.column_config.NumberColumn(format="%.2f"),
@@ -335,13 +350,12 @@ def main():
         # Reordenar colunas para exibição na tela
         colunas_pedidos_display = [
             'OS', 'Cliente', 'Descricao_Pedido', 'Valor_Pedido_Total_R$', 
-            'Peso_Total_Pedido_kg', 'Quantidade_Caixas'
+            'Peso_Total_Pedido_kg', 'Quantidade_Caixas',
+            'Dimensao_Corte_LxC_m', 'Modelo_Chapa_Pedido', 'Tipo_Papel_Pedido', 
+            'Gramatura_Pedido', 'Chapas_Consumidas', 'Retalhos_Gerados_Dimensoes', 
+            'Data_Processamento'
         ]
-        # Adicionar as outras colunas que não estão na lista acima
-        for col in st.session_state.df_pedidos.columns:
-            if col not in colunas_pedidos_display:
-                colunas_pedidos_display.append(col)
-
+        
         st.dataframe(st.session_state.df_pedidos[colunas_pedidos_display].tail(5), use_container_width=True,
                      column_config={
                          "Valor_Pedido_Total_R$": st.column_config.NumberColumn(format="%.2f"),
@@ -356,14 +370,24 @@ def main():
 
         st.subheader("Estoque Atual na Memória:")
         if not st.session_state.df_estoque.empty:
-            # Calcular totais do estoque para exibir
+            # Calcular totais para exibir na tabela e no download
+            total_area_m2_estoque = (st.session_state.df_estoque['Largura_m'] * st.session_state.df_estoque['Comprimento_m'] * st.session_state.df_estoque['Quantidade_Folhas']).sum()
             total_peso_estoque_kg = st.session_state.df_estoque['Peso_Total_kg'].sum()
             total_valor_estoque_rs = st.session_state.df_estoque['Valor_Total_R$'].sum()
             
-            st.metric(label="**Peso Total do Estoque**", value=f"{total_peso_estoque_kg/1000:.2f} Toneladas")
-            st.metric(label="**Valor Total do Estoque**", value=f"R$ {total_valor_estoque_rs:.2f}")
-
-            st.dataframe(st.session_state.df_estoque, use_container_width=True,
+            # Criar cópia para exibição na tela e adicionar linha de totais
+            df_estoque_display = st.session_state.df_estoque.copy()
+            df_estoque_display.loc[''] = '' # Linha em branco para separar
+            df_estoque_display.loc['Total Geral'] = {
+                'Modelo_Chapa': 'TOTAL GERAL',
+                'Largura_m': total_area_m2_estoque, 
+                'Comprimento_m': 'm² (Área Total)', 
+                'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
+                'Peso_Total_kg': total_peso_estoque_kg,
+                'Valor_Total_R$': total_valor_estoque_rs
+            }
+            
+            st.dataframe(df_estoque_display, use_container_width=True, 
                          column_config={
                              "Preco_Kg": st.column_config.NumberColumn(format="%.2f"),
                              "Peso_Total_kg": st.column_config.NumberColumn(format="%.2f"),
@@ -371,19 +395,17 @@ def main():
                          })
             
             # --- Botão de Download do Estoque em CSV ---
-            # Para o CSV de download, garantir que todas as colunas estejam visíveis e os totais no final
+            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
+            # O CSV para download usa o df original (df_estoque) e adiciona a linha de totais ao final
             df_estoque_download = st.session_state.df_estoque.copy()
-            
-            # Adicionar linhas de totais
-            df_estoque_download.loc[''] = '' # Linha em branco para separar
             df_estoque_download.loc['Total Geral'] = {
                 'Modelo_Chapa': 'TOTAL GERAL',
-                'Largura_m': '', 'Comprimento_m': '', 'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
+                'Largura_m': total_area_m2_estoque, 
+                'Comprimento_m': f'{total_area_m2_estoque:.2f} m² (Área Total)', # Formata para string no CSV
+                'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
                 'Peso_Total_kg': total_peso_estoque_kg,
                 'Valor_Total_R$': total_valor_estoque_rs
             }
-
-            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
             csv_estoque = df_estoque_download.to_csv(index=False, sep=';', decimal=',').encode('utf-8') 
             st.download_button(
                 label="Baixar Estoque Atualizado (CSV)",
