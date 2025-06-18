@@ -1,39 +1,42 @@
 import streamlit as st
 import pandas as pd
 import math
-import io 
+import io
 from datetime import datetime
 
-# --- Configurações da Chapa Padrão (Fixas - Apenas para aproveitamento na chapa padrão) ---
-# Embora o app trabalhe com qualquer chapa no estoque, esta é a dimensão de referência para calcular retalhos se a chapa cortada for desta base.
+# --- Configurações da Chapa Padrão (FIXAS - Apenas como dimensão de referência para alguns retalhos específicos se o corte for 'padrão') ---
+# As dimensões de chapa base para cálculo de aproveitamento AGORA virão do estoque selecionado.
+# Estas constantes são mantidas para referência de DIMENSÕES DE RETALHOS comumente gerados.
 LARGURA_CHAPA_PADRAO_MM = 1680  # mm
 COMPRIMENTO_CHAPA_PADRAO_MM = 2600  # mm
 
-# --- Lógica de Cálculo Automático de Caixas por Chapa Padrão e Retalhos ---
-# Esta função calcula o aproveitamento de uma 'chapa de corte' dentro de uma 'chapa base' (neste caso, a padrão 1680x2600mm)
-def calcular_aproveitamento_e_retalhos(largura_corte_mm, comprimento_corte_mm):
-    lp = LARGURA_CHAPA_PADRAO_MM
-    cp = COMPRIMENTO_CHAPA_PADRAO_MM
+# --- Lógica de Cálculo Automático de Caixas por Chapa Base e Retalhos ---
+# Esta função AGORA aceita as dimensões da chapa base (do estoque) como parâmetros
+def calcular_aproveitamento_e_retalhos(largura_corte_mm, comprimento_corte_mm, largura_chapa_base_mm, comprimento_chapa_base_mm):
+    lp = largura_chapa_base_mm
+    cp = comprimento_chapa_base_mm
 
-    # Orientação 1: Cortar largura_corte_mm na largura da chapa padrão (lp) e comprimento_corte_mm no comprimento (cp)
+    # Orientação 1: Cortar largura_corte_mm na largura da chapa base (lp) e comprimento_corte_mm no comprimento (cp)
     num_pecas_largura_1 = math.floor(lp / largura_corte_mm)
     num_pecas_comprimento_1 = math.floor(cp / comprimento_corte_mm)
     qtd_caixas_orientacao_1 = num_pecas_largura_1 * num_pecas_comprimento_1
 
     sobra_largura_1 = lp - (num_pecas_largura_1 * largura_corte_mm)
     sobra_comprimento_1 = cp - (num_pecas_comprimento_1 * comprimento_corte_mm)
-    retalho_1_orientacao_1 = f"{sobra_largura_1}x{cp}" # Sobra na largura, percorrendo todo o comprimento
-    retalho_2_orientacao_1 = f"{lp}x{sobra_comprimento_1}" # Sobra no comprimento, percorrendo toda a largura
+    # Retalhos são descritos em MM
+    retalho_1_orientacao_1 = f"{sobra_largura_1:.0f}x{cp:.0f}" # Sobra na largura, percorrendo todo o comprimento
+    retalho_2_orientacao_1 = f"{lp:.0f}x{sobra_comprimento_1:.0f}" # Sobra no comprimento, percorrendo toda a largura
 
-    # Orientação 2: Cortar comprimento_corte_mm na largura da chapa padrão (lp) e largura_corte_mm no comprimento (cp)
+    # Orientação 2: Cortar comprimento_corte_mm na largura da chapa base (lp) e largura_corte_mm no comprimento (cp)
     num_pecas_largura_2 = math.floor(lp / comprimento_corte_mm)
     num_pecas_comprimento_2 = math.floor(cp / largura_corte_mm)
     qtd_caixas_orientacao_2 = num_pecas_largura_2 * num_pecas_comprimento_2
     
     sobra_largura_2 = lp - (num_pecas_largura_2 * comprimento_corte_mm)
     sobra_comprimento_2 = cp - (num_pecas_comprimento_2 * largura_corte_mm)
-    retalho_1_orientacao_2 = f"{sobra_largura_2}x{cp}"
-    retalho_2_orientacao_2 = f"{lp}x{sobra_comprimento_2}"
+    # Retalhos são descritos em MM
+    retalho_1_orientacao_2 = f"{sobra_largura_2:.0f}x{cp:.0f}"
+    retalho_2_orientacao_2 = f"{lp:.0f}x{sobra_comprimento_2:.0f}"
 
     # Escolher a melhor orientação (maior número de caixas)
     if qtd_caixas_orientacao_1 >= qtd_caixas_orientacao_2:
@@ -77,7 +80,7 @@ def main():
         uploaded_file = st.file_uploader("Carregar arquivo de Estoque CSV (.csv)", type=["csv"], key="estoque_uploader")
         if uploaded_file is not None:
             try:
-                st.session_state.df_estoque = pd.read_csv(uploaded_file, sep=';', decimal=',') # Adicionado decimal=',' para números com vírgula
+                st.session_state.df_estoque = pd.read_csv(uploaded_file, sep=';', decimal=',') # Considera ; como separador
                 # Garante que as colunas numéricas estejam no tipo correto
                 st.session_state.df_estoque['Largura_m'] = pd.to_numeric(st.session_state.df_estoque['Largura_m'], errors='coerce')
                 st.session_state.df_estoque['Comprimento_m'] = pd.to_numeric(st.session_state.df_estoque['Comprimento_m'], errors='coerce')
@@ -153,7 +156,7 @@ def main():
                             'Valor_Total_R$': valor_total_item_rs
                         }])
                         st.session_state.df_estoque = pd.concat([st.session_state.df_estoque, novo_item], ignore_index=True)
-                        st.success(f"Modelo '{modelo_chapa}' adicionado ao estoque!")
+                        st.success(f"Item de estoque {modelo_chapa} adicionado com sucesso!")
                     
                     st.session_state.df_estoque = st.session_state.df_estoque.sort_values(by=['Modelo_Chapa', 'Tipo_Papel', 'Gramatura']).reset_index(drop=True)
 
@@ -211,26 +214,25 @@ def main():
                         largura_chapa_estoque_m = chapa_estoque_data['Largura_m']
                         comprimento_chapa_estoque_m = chapa_estoque_data['Comprimento_m']
                         preco_kg_chapa_estoque = chapa_estoque_data['Preco_Kg']
-                        peso_m2_kg_estoque = chapa_estoque_data['Gramatura'] / 1000 # Convertendo g/m2 para kg/m2
                         
                         # --- Cálculos do Pedido ---
-                        # Converter dimensões de corte de M para MM para a função de aproveitamento
+                        # CONVERTER DIMENSÕES DA CHAPA DE ESTOQUE PARA MM PARA A FUNÇÃO DE APROVEITAMENTO
+                        largura_chapa_estoque_mm = largura_chapa_estoque_m * 1000
+                        comprimento_chapa_estoque_mm = comprimento_chapa_estoque_m * 1000
+
+                        # CONVERTER DIMENSÕES DE CORTE DA CAIXA PARA MM PARA A FUNÇÃO DE APROVEITAMENTO
                         dim_largura_corte_mm = dim_largura_corte_m * 1000
                         dim_comprimento_corte_mm = dim_comprimento_corte_m * 1000
 
-                        # A função calcular_aproveitamento_e_retalhos ainda usa a CHAPA PADRÃO FIXA (1680x2600mm)
-                        # Se o aproveitamento deveria ser da chapa ESCOLHIDA no estoque, essa função precisaria ser mais dinâmica.
-                        # Por enquanto, ela calcula o aproveitamento na chapa padrão de 1680x2600mm.
-                        # Se você quiser que ela use a dimensão da chapa do estoque (largura_chapa_estoque_m x comprimento_chapa_estoque_m), precisamos ajustar a função.
-                        
-                        # UTILIZANDO A LÓGICA ATUAL DE APROVEITAMENTO NA CHAPA PADRÃO FIXA (1680x2600mm)
-                        qtd_caixas_por_chapa_padrao, retalho1_dim_mm, retalho2_dim_mm = \
-                            calcular_aproveitamento_e_retalhos(dim_largura_corte_mm, dim_comprimento_corte_mm)
+                        # AGORA A FUNÇÃO 'calcular_aproveitamento_e_retalhos' RECEBE A CHAPA DO ESTOQUE COMO BASE
+                        qtd_caixas_por_chapa_base, retalho1_dim_mm_str, retalho2_dim_mm_str = \
+                            calcular_aproveitamento_e_retalhos(dim_largura_corte_mm, dim_comprimento_corte_mm, 
+                                                               largura_chapa_estoque_mm, comprimento_chapa_estoque_mm)
 
-                        if qtd_caixas_por_chapa_padrao == 0:
-                            st.error(f"Erro: A chapa de corte {dim_largura_corte_m}x{dim_comprimento_corte_m}m não cabe na chapa padrão {LARGURA_CHAPA_PADRAO_MM}x{COMPRIMENTO_CHAPA_PADRAO_MM}mm em nenhuma orientação. Verifique as dimensões.")
+                        if qtd_caixas_por_chapa_base == 0:
+                            st.error(f"Erro: A chapa de corte {dim_largura_corte_m}x{dim_comprimento_corte_m}m não cabe na chapa do estoque '{modelo_chapa_pedido}' ({largura_chapa_estoque_m}x{comprimento_chapa_estoque_m}m) em nenhuma orientação. Verifique as dimensões.")
                         else:
-                            num_folhas_consumidas = math.ceil(qtd_caixas / qtd_caixas_por_chapa_padrao)
+                            num_folhas_consumidas = math.ceil(qtd_caixas / qtd_caixas_por_chapa_base)
 
                             # --- Verificar e Abater Quantidade no Estoque ---
                             estoque_atual_chapa_qty = st.session_state.df_estoque.loc[chapa_estoque_idx, 'Quantidade_Folhas'].iloc[0]
@@ -241,71 +243,58 @@ def main():
                             
                             # Atualiza Peso_Total_kg e Valor_Total_R$ para o item abatido
                             existing_qty = st.session_state.df_estoque.loc[chapa_estoque_idx, 'Quantidade_Folhas'].iloc[0]
-                            area_chapa_estoque_m2 = largura_chapa_estoque_m * comprimento_chapa_estoque_m
-                            peso_m2_kg_chapa_estoque = gramatura_pedido / 1000 # Pega a gramatura do pedido/chapa do estoque
-                            st.session_state.df_estoque.loc[chapa_estoque_idx, 'Peso_Total_kg'] = area_chapa_estoque_m2 * peso_m2_kg_chapa_estoque * existing_qty
+                            # Recalcula a área da chapa do estoque usando suas dimensões em metros
+                            area_chapa_estoque_m2_recalc = largura_chapa_estoque_m * comprimento_chapa_estoque_m
+                            peso_m2_kg_chapa_estoque_recalc = gramatura_pedido / 1000 # Pega a gramatura do pedido/chapa do estoque
+                            st.session_state.df_estoque.loc[chapa_estoque_idx, 'Peso_Total_kg'] = area_chapa_estoque_m2_recalc * peso_m2_kg_chapa_estoque_recalc * existing_qty
                             st.session_state.df_estoque.loc[chapa_estoque_idx, 'Valor_Total_R$'] = st.session_state.df_estoque.loc[chapa_estoque_idx, 'Peso_Total_kg'] * preco_kg_chapa_estoque
 
 
-                            # --- Cálculo do Peso Total do Pedido ---
+                            # --- Cálculo do Peso Total do Pedido (relacionado ao produto final, não ao consumo da chapa) ---
                             area_chapa_corte_por_caixa_m2 = dim_largura_corte_m * dim_comprimento_corte_m
                             peso_total_pedido_kg = area_chapa_corte_por_caixa_m2 * (gramatura_pedido / 1000) * qtd_caixas
 
                             # --- Adicionar Retalhos Gerados ao Estoque ---
                             retalhos_gerados_info = {} 
                             
-                            # Retalhos são gerados da chapa PADRÃO (1680x2600mm), não da chapa ESCOLHIDA no estoque
-                            # Isso significa que as dimensões dos retalhos (1680x1240, 384x1360) são fixas.
-                            # Para que a lógica de retalhos funcione, o modelo 'Modelo_Chapa' para esses retalhos também precisa ser adicionado no estoque.
-                            # Para simplificar aqui, vamos apenas somar nas quantidades existentes.
+                            if retalho1_dim_mm_str != "0x0" and retalho1_dim_mm_str != f"{largura_chapa_estoque_mm:.0f}x0" and retalho1_dim_mm_str != f"0x{comprimento_chapa_estoque_mm:.0f}": 
+                                retalhos_gerados_info[retalho1_dim_mm_str] = retalhos_gerados_info.get(retalho1_dim_mm_str, 0) + num_folhas_consumidas
                             
-                            # Retalho 1
-                            if retalho1_dim_mm != "0x2600" and retalho1_dim_mm != "1680x0": 
-                                dim_retalho_str = retalho1_dim_mm # Mantém como string "LarguraXComprimento"
-                                retalhos_gerados_info[dim_retalho_str] = retalhos_gerados_info.get(dim_retalho_str, 0) + num_folhas_consumidas
-                            
-                            # Retalho 2
-                            if retalho2_dim_mm != "0x2600" and retalho2_dim_mm != "1680x0": 
-                                dim_retalho_str = retalho2_dim_mm
-                                retalhos_gerados_info[dim_retalho_str] = retalhos_gerados_info.get(dim_retalho_str, 0) + num_folhas_consumidas
+                            if retalho2_dim_mm_str != "0x0" and retalho2_dim_mm_str != f"{largura_chapa_estoque_mm:.0f}x0" and retalho2_dim_mm_str != f"0x{comprimento_chapa_estoque_mm:.0f}": 
+                                retalhos_gerados_info[retalho2_dim_mm_str] = retalhos_gerados_info.get(retalho2_dim_mm_str, 0) + num_folhas_consumidas
                             
                             for dim_retalho_mm_str, qty_retalho in retalhos_gerados_info.items():
-                                # É crucial que o 'Modelo_Chapa' dos retalhos seja consistente se você os gerencia assim.
-                                # Por simplicidade aqui, vamos procurar por retalhos SEM MODELO_CHAPA ou com modelo genérico.
-                                # Se você tem modelos específicos para retalhos, essa parte precisa ser ajustada.
-                                
-                                # Convertendo dimensão do retalho de MM para M para procurar no estoque
                                 retalho_largura_m, retalho_comprimento_m = [float(x)/1000 for x in dim_retalho_mm_str.split('x')]
                                 
+                                # Procura por retalhos existentes no estoque pelo TIPO, GRAMATURA e DIMENSÃO
                                 item_retalho_idx = st.session_state.df_estoque[
-                                    (st.session_state.df_estoque['Largura_m'] == retalho_largura_m) &
-                                    (st.session_state.df_estoque['Comprimento_m'] == retalho_comprimento_m) &
                                     (st.session_state.df_estoque['Tipo_Papel'] == tipo_papel_pedido) &
-                                    (st.session_state.df_estoque['Gramatura'] == gramatura_pedido)
+                                    (st.session_state.df_estoque['Gramatura'] == gramatura_pedido) &
+                                    (st.session_state.df_estoque['Largura_m'] == retalho_largura_m) &
+                                    (st.session_state.df_estoque['Comprimento_m'] == retalho_comprimento_m)
                                 ].index
+                                
                                 if not item_retalho_idx.empty:
                                     st.session_state.df_estoque.loc[item_retalho_idx, 'Quantidade_Folhas'] += qty_retalho
                                     # Recalcula peso/valor do retalho atualizado
                                     existing_qty_retalho = st.session_state.df_estoque.loc[item_retalho_idx, 'Quantidade_Folhas'].iloc[0]
-                                    area_retalho_m2 = retalho_largura_m * retalho_comprimento_m
-                                    preco_kg_retalho = st.session_state.df_estoque.loc[item_retalho_idx, 'Preco_Kg'].iloc[0] # Usa o preço do retalho se já existir
-                                    st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] = area_retalho_m2 * (gramatura_pedido/1000) * existing_qty_retalho
+                                    area_retalho_m2_recalc = retalho_largura_m * retalho_comprimento_m
+                                    preco_kg_retalho = st.session_state.df_estoque.loc[item_retalho_idx, 'Preco_Kg'].iloc[0] 
+                                    st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] = area_retalho_m2_recalc * (gramatura_pedido/1000) * existing_qty_retalho
                                     st.session_state.df_estoque.loc[item_retalho_idx, 'Valor_Total_R$'] = st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] * preco_kg_retalho
                                 else:
-                                    # Se o retalho não existe com esse Modelo_Chapa (que não foi especificado), cria um item genérico de retalho
-                                    # MODELO_CHAPA para retalhos precisa ser genérico ou especificado pelo usuário ao adicionar.
-                                    # Aqui, um modelo genérico 'Retalho_<dimensão>' é usado.
-                                    st.warning(f"Retalho {dim_retalho_str} ({tipo_papel_pedido}, {gramatura_pedido}g/m²) gerado e adicionado como novo item de estoque. Você deve adicionar este 'Modelo_Chapa' para retalhos com um preço por Kg se quiser seu valor calculado.")
+                                    # Se o retalho não existe no estoque com essas características, adiciona como novo item
+                                    st.warning(f"Retalho {dim_retalho_mm_str} ({tipo_papel_pedido}, {gramatura_pedido}g/m²) gerado e adicionado como novo item de estoque com modelo 'RETALHO-{dim_retalho_mm_str}' e Preço/Kg de 0.01. Considere adicioná-lo ou atualizar seu preço na aba 'Lançar Estoque' para valorização correta.")
                                     novo_retalho = pd.DataFrame([{
-                                        'Modelo_Chapa': f"Retalho {dim_retalho_str}", # Nome genérico para retalho
+                                        'Modelo_Chapa': f"RETALHO-{dim_retalho_mm_str}", # Nome genérico para retalho
                                         'Largura_m': retalho_largura_m,
                                         'Comprimento_m': retalho_comprimento_m,
                                         'Tipo_Papel': tipo_papel_pedido,
                                         'Gramatura': gramatura_pedido,
                                         'Quantidade_Folhas': qty_retalho,
-                                        'Preco_Kg': 0.01, # Preço padrão baixo para retalho novo, ou ajustável
-                                        'Peso_Total_kg': area_retalho_m2 * (gramatura_pedido/1000) * qty_retalho,
-                                        'Valor_Total_R$': area_retalho_m2 * (gramatura_pedido/1000) * qty_retalho * 0.01
+                                        'Preco_Kg': 0.01, # Preço padrão baixo para retalho novo
+                                        'Peso_Total_kg': retalho_largura_m * retalho_comprimento_m * (gramatura_pedido/1000) * qty_retalho,
+                                        'Valor_Total_R$': retalho_largura_m * retalho_comprimento_m * (gramatura_pedido/1000) * qty_retalho * 0.01
                                     }])
                                     st.session_state.df_estoque = pd.concat([st.session_state.df_estoque, novo_retalho], ignore_index=True)
                             
@@ -324,17 +313,15 @@ def main():
                                 'Gramatura_Pedido': gramatura_pedido,
                                 'Chapas_Consumidas': num_folhas_consumidas,
                                 'Retalhos_Gerados_Dimensoes': str(list(retalhos_gerados_info.keys())),
-                                'Retalhos_1680x1240_Gerados': retalhos_gerados_info.get("1680x1240", 0),
-                                'Retalhos_384x1360_Gerados': retalhos_gerados_info.get("384x1360", 0),
                                 'Peso_Total_Pedido_kg': peso_total_pedido_kg,
                                 'Data_Processamento': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             }])
                             st.session_state.df_pedidos = pd.concat([st.session_state.df_pedidos, novo_pedido_log], ignore_index=True)
 
                             st.success(f"Pedido OS: {os_pedido} processado e estoque atualizado na memória!")
-                            st.info(f"O aproveitamento da chapa de corte {dim_largura_corte_m}x{dim_comprimento_corte_m}m na chapa padrão {LARGURA_CHAPA_PADRAO_MM}x{COMPRIMENTO_CHAPA_PADRAO_MM}mm é de **{qtd_caixas_por_chapa_padrao} caixas por chapa padrão.**")
+                            st.info(f"O aproveitamento da chapa de corte {dim_largura_corte_m}x{dim_comprimento_corte_m}m na chapa do estoque '{modelo_chapa_pedido}' ({largura_chapa_estoque_m}x{comprimento_chapa_estoque_m}m) é de **{qtd_caixas_por_chapa_base} caixas por folha.**")
                             st.write(f"Você precisará de **{num_folhas_consumidas}** chapas do modelo '{modelo_chapa_pedido}' ({tipo_papel_pedido}, {gramatura_pedido}g/m²).")
-                            st.write(f"Serão gerados: {retalhos_gerados_info}. Verifique se adicionou os modelos de retalho ao estoque para ter seus valores calculados corretamente.")
+                            st.write(f"Serão gerados: {retalhos_gerados_info}. **Importante:** Se quiser controlar e valorizar seus retalhos, adicione-os na aba 'Lançar Estoque' com seus próprios 'Modelo da Chapa' e 'Preço por Kg'.")
                             
                             # Limpar campos do formulário de pedido
                             st.session_state.pedido_os_input = ''
@@ -380,6 +367,7 @@ def main():
                          })
             
             # --- Botão de Download do Estoque em CSV ---
+            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
             csv_estoque = st.session_state.df_estoque.to_csv(index=False, sep=';', decimal=',').encode('utf-8') 
             st.download_button(
                 label="Baixar Estoque Atualizado (CSV)",
@@ -399,6 +387,7 @@ def main():
                          })
             
             # --- Botão de Download do Histórico de Pedidos em CSV ---
+            # O separador é ';' e o decimal é ',' para compatibilidade com Excel no Brasil
             csv_pedidos = st.session_state.df_pedidos.to_csv(index=False, sep=';', decimal=',').encode('utf-8')
             st.download_button(
                 label="Baixar Histórico de Pedidos (CSV)",
@@ -412,20 +401,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-     
-
-
-    
-  
-
-       
-       
-                 
-                      
-                               
-                      
-                      
-             
-          
-
-
