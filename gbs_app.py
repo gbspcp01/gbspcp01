@@ -330,4 +330,118 @@ def main():
                         st.session_state.df_estoque.loc[item_retalho_idx, 'Valor_Total_R$'] = st.session_state.df_estoque.loc[item_retalho_idx, 'Peso_Total_kg'] * preco_kg_retalho
                     else:
                         # Se o retalho não existe no estoque com essas características, adiciona como novo item
-                        st.warning(f"Retalho {dim_retalho_mm_str} ({temp_data['tipo_papel_pedido']}, {temp_data['gramatura_
+                        st.warning(f"Retalho {dim_retalho_mm_str} ({temp_data['tipo_papel_pedido']}, {temp_data['gramatura_pedido']}g/m²) gerado e adicionado como novo item de estoque com modelo 'RETALHO-{dim_retalho_mm_str}' e Preço/Kg de 0.01. Considere adicioná-lo ou atualizar seu preço na aba 'Lançar Estoque'.")
+                        novo_retalho = pd.DataFrame([{
+                            'Modelo_Chapa': f"RETALHO-{dim_retalho_mm_str}", 
+                            'Largura_m': retalho_largura_m,
+                            'Comprimento_m': retalho_comprimento_m,
+                            'Tipo_Papel': temp_data['tipo_papel_pedido'],
+                            'Gramatura': temp_data['gramatura_pedido'],
+                            'Quantidade_Folhas': qty_total_retalho,
+                            'Preco_Kg': 0.01, 
+                            'Peso_Total_kg': retalho_largura_m * retalho_comprimento_m * (temp_data['gramatura_pedido']/1000) * qty_total_retalho,
+                            'Valor_Total_R$': retalho_largura_m * retalho_comprimento_m * (temp_data['gramatura_pedido']/1000) * qty_total_retalho * 0.01
+                        }])
+                        st.session_state.df_estoque = pd.concat([st.session_state.df_estoque, novo_retalho], ignore_index=True)
+                        
+                    retalhos_gerados_dims_string.append(f"{qty_total_retalho}x {dim_retalho_mm_str}") 
+                
+                st.session_state.df_estoque = st.session_state.df_estoque.sort_values(by=['Modelo_Chapa', 'Tipo_Papel', 'Gramatura']).reset_index(drop=True)
+
+                # --- Registrar Pedido no Log da Sessão (st.session_state.df_pedidos) ---
+                novo_pedido_log = pd.DataFrame([{
+                    'OS': temp_data['os_pedido'], 'Cliente': temp_data['cliente'], 'Descricao_Pedido': temp_data['descricao'], 
+                    'Valor_Pedido_Total_R$': temp_data['valor_pedido_total'], 
+                    'Dimensao_Corte_LxC_m': f"{temp_data['dim_largura_corte_m']}x{temp_data['dim_comprimento_corte_m']}",
+                    'Quantidade_Caixas': temp_data['qtd_caixas'], 'Modelo_Chapa_Pedido': temp_data['modelo_chapa_pedido'],
+                    'Tipo_Papel_Pedido': temp_data['tipo_papel_pedido'], 'Gramatura_Pedido': temp_data['gramatura_pedido'], 
+                    'Chapas_Consumidas': temp_data['num_folhas_consumidas'], 
+                    'Retalhos_Gerados_Dimensoes': ", ".join(temp_data['retalhos_gerados_dims_string']),
+                    'Peso_Total_Pedido_kg': temp_data['peso_total_pedido_kg'],
+                    'Data_Processamento': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }])
+                st.session_state.df_pedidos = pd.concat([st.session_state.df_pedidos, novo_pedido_log], ignore_index=True)
+
+                st.success(f"Pedido OS: {temp_data['os_pedido']} LANÇADO E ESTOQUE ATUALIZADO com sucesso!")
+                st.info("Verifique a tabela de estoque e baixe os relatórios para salvar os dados.")
+                
+                # Limpar dados temporários e forçar rerun para limpar o formulário
+                st.session_state.calculo_pedido_temp = None
+                st.rerun() # Dispara um rerun para limpar o formulário e atualizar as tabelas
+
+
+        st.subheader("Últimos Pedidos Processados NESTA Sessão:")
+        if not st.session_state.df_pedidos.empty:
+            # Reordenar colunas para exibição na tela
+            colunas_pedidos_display = [
+                'OS', 'Cliente', 'Descricao_Pedido', 'Valor_Pedido_Total_R$', 
+                'Peso_Total_Pedido_kg', 'Quantidade_Caixas',
+                'Dimensao_Corte_LxC_m', 'Modelo_Chapa_Pedido', 'Tipo_Papel_Pedido', 
+                'Gramatura_Pedido', 'Chapas_Consumidas', 'Retalhos_Gerados_Dimensoes', 
+                'Data_Processamento'
+            ]
+            
+            st.dataframe(st.session_state.df_pedidos[colunas_pedidos_display].tail(5), use_container_width=True,
+                          column_config={
+                              "Valor_Pedido_Total_R$": st.column_config.NumberColumn(format="%.2f"),
+                              "Peso_Total_Pedido_kg": st.column_config.NumberColumn(format="%.2f")
+                          })
+        else:
+            st.info("Nenhum pedido processado nesta sessão ainda.")
+
+    with tab_relatorios:
+        st.header("📊 Relatórios e Downloads")
+        st.write("Baixe suas planilhas para salvar os dados permanentemente no seu computador. Lembre-se de fazer o upload do estoque na próxima sessão.")
+
+        st.subheader("Estoque Atual na Memória:")
+        if not st.session_state.df_estoque.empty:
+            # Calcular totais para exibição na tabela
+            total_area_m2_estoque = (st.session_state.df_estoque['Largura_m'] * st.session_state.df_estoque['Comprimento_m'] * st.session_state.df_estoque['Quantidade_Folhas']).sum()
+            total_peso_estoque_kg = st.session_state.df_estoque['Peso_Total_kg'].sum()
+            total_valor_estoque_rs = st.session_state.df_estoque['Valor_Total_R$'].sum()
+
+            # Criar cópia para exibição na tela e adicionar linha de totais
+            df_estoque_display = st.session_state.df_estoque.copy()
+            df_estoque_display.loc[''] = '' # Linha em branco para separar
+            df_estoque_display.loc['Total Geral'] = {
+                'Modelo_Chapa': 'TOTAL GERAL',
+                'Largura_m': f"{total_area_m2_estoque:.2f}", # Formata para string na exibição
+                'Comprimento_m': 'm² (Área Total)', 
+                'Tipo_Papel': '', 'Gramatura': '', 'Quantidade_Folhas': '', 'Preco_Kg': '',
+                'Peso_Total_kg': total_peso_estoque_kg,
+                'Valor_Total_R$': total_valor_estoque_rs
+            }
+            
+            st.dataframe(df_estoque_display, use_container_width=True, 
+                          column_config={
+                              "Preco_Kg": st.column_config.NumberColumn(format="%.2f"),
+                              "Peso_Total_kg": st.column_config.NumberColumn(format="%.2f"),
+                              "Valor_Total_R$": st.column_config.NumberColumn(format="%.2f")
+                          })
+        else:
+            st.info("Nenhum item no estoque na memória. Adicione acima ou carregue um arquivo CSV.")
+
+        st.subheader("Histórico de Pedidos Processados NESTA Sessão:")
+        if not st.session_state.df_pedidos.empty:
+            # Reordenar colunas para o download
+            colunas_pedidos_download = [
+                'OS', 'Cliente', 'Descricao_Pedido', 'Valor_Pedido_Total_R$', 
+                'Peso_Total_Pedido_kg', 'Quantidade_Caixas',
+                'Dimensao_Corte_LxC_m', 'Modelo_Chapa_Pedido', 'Tipo_Papel_Pedido', 
+                'Gramatura_Pedido', 'Chapas_Consumidas', 'Retalhos_Gerados_Dimensoes', 
+                'Data_Processamento'
+            ]
+            
+            csv_pedidos = st.session_state.df_pedidos[colunas_pedidos_download].to_csv(index=False, sep=';', decimal=',').encode('utf-8')
+            st.download_button(
+                label="Baixar Histórico de Pedidos (CSV)",
+                data=csv_pedidos,
+                file_name="pedidos_gbs_historico.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("Nenhum pedido no histórico para download.")
+
+
+if __name__ == "__main__":
+    main()
